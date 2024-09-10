@@ -1,6 +1,6 @@
 <?php
 
-namespace Sweeper\Tasks;
+namespace App\Tasks;
 
 use SilverStripe\Dev\BuildTask;
 use SilverStripe\ORM\Connect\TempDatabase;
@@ -135,6 +135,12 @@ class SweeperArtefacts extends BuildTask
         self::log("Found " . count($tableList) . " tables to drop", true, true);
         foreach ($tableList as $tableName) {
             self::log("Dropping $tableName");
+
+            if (self::$dryRun) {
+                continue;
+            }
+
+            DB::query("DROP TABLE IF EXISTS `$tableName`");
         }
         self::log("Dropped " . count($tableList) . " tables", true, true);
     }
@@ -152,6 +158,14 @@ class SweeperArtefacts extends BuildTask
         foreach ($indexList as $tableName => $indexes) {
             $indexCount += count($indexes);
             self::log("$tableName indexes: " . implode(', ', $indexes));
+
+            if (self::$dryRun) {
+                continue;
+            }
+
+            foreach ($indexes as $index) {
+                DB::query("DROP INDEX `$index` ON `$tableName`");
+            }
         }
 
         self::log("Dropped $indexCount indexes", true, true);
@@ -170,6 +184,14 @@ class SweeperArtefacts extends BuildTask
         foreach ($columnList as $tableName => $columns) {
             $columnCount += count($columns);
             self::log("$tableName columns: " . implode(', ', $columns));
+
+            if (self::$dryRun) {
+                continue;
+            }
+
+            foreach ($columns as $column) {
+                DB::query("ALTER TABLE `$tableName` DROP COLUMN `$column`");
+            }
         }
 
         self::log("Dropped $columnCount columns", true, true);
