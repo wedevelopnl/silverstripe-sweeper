@@ -1,0 +1,44 @@
+{
+    "name": "wedevelopnl/silverstripe-sweeper",
+    "description": "A set of tasks that help clean up long-running silverstripe projects",
+    "type": "silverstripe-vendormodule",
+    "keywords": [
+        "silverstripe",
+        "CMS",
+        "Sweeper",
+        "Cleanup",
+        "Archive",
+        "Artefacts"
+    ],
+    "license": "BSD-3-Clause",
+    "require": {
+        "php": "^8.0",
+        "silverstripe/framework": "^5.0",
+        "silverstripe/versioned": "^2.2"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^9.6",
+        "squizlabs/php_codesniffer": "^3.7",
+        "silverstripe/standards": "^1",
+        "phpstan/extension-installer": "^1.3"
+    },
+    "autoload": {
+        "psr-4": {
+            "Sweeper\\": "src/",
+        }
+    },
+    "extra": {
+        "expose": [
+            "client/dist"
+        ]
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "config": {
+        "allow-plugins": {
+            "composer/installers": true,
+            "phpstan/extension-installer": true,
+            "silverstripe/vendor-plugin": true
+        }
+    }
+}
