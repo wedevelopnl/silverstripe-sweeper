@@ -12,7 +12,14 @@ class SweeperArtefacts extends BuildTask
 
     private static bool $dryRun = true;
 
+    protected $title = 'DEPRECATED: use sweeper-schema-artefacts';
+
     protected $description = <<<DESCRIPTION
+        DEPRECATED: superseded by dev/tasks/sweeper-schema-artefacts, which needs
+        no CREATE DATABASE privilege and adds a confirmation token. This task
+        builds a clean schema in a temporary database (requires CREATE/DROP
+        DATABASE rights on the server).
+
         Builds a clean in-memory database and compares it with the schema of the currently configured database,
         will then run a diff of both schemas to discern any extraneous tables or columns that can be removed.
 
@@ -23,6 +30,12 @@ class SweeperArtefacts extends BuildTask
     public function run($request): int
     {
         self::$dryRun = !($request->getVar('run') === 'yes');
+
+        $deprecation = 'DEPRECATED: this task is superseded by dev/tasks/sweeper-schema-artefacts '
+            . '(no CREATE DATABASE privilege needed, adds a confirmation token).';
+        echo \SilverStripe\Control\Director::is_cli()
+            ? "!! {$deprecation}\n\n"
+            : '<p style="border-left:4px solid #dc2626;background:#fef2f2;padding:.5rem .75rem">' . $deprecation . '</p>';
 
         $mapIndexListToName = static function ($indexEntry) {
             return $indexEntry['name'];
