@@ -5,16 +5,14 @@ namespace Sweeper\Tasks;
 use Composer\InstalledVersions;
 use Generator;
 use InvalidArgumentException;
-use SilverStripe\Control\Director;
 use SilverStripe\Core\ClassInfo;
-use SilverStripe\Core\Convert;
 use SilverStripe\Core\Environment;
 use SilverStripe\Dev\BuildTask;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\DB;
 use SilverStripe\ORM\Queries\SQLSelect;
 use SilverStripe\Versioned\Versioned;
-use SilverStripe\View\HTML;
+use Sweeper\Output\TaskOutput;
 
 class SweeperClearArchiveTask extends BuildTask
 {
@@ -41,6 +39,16 @@ class SweeperClearArchiveTask extends BuildTask
     protected bool $dry = false;
     protected bool $fast = false;
 
+    private TaskOutput $output;
+
+    private int $totalDraftVersionsCleared = 0;
+
+    private int $totalArchivedVersionsCleared = 0;
+
+    private int $totalOrphanedRowsCleared = 0;
+
+    private int $totalSnapshotsCleared = 0;
+
     public function run($request): void
     {
         $run = $request->getVar('run');
@@ -50,6 +58,8 @@ class SweeperClearArchiveTask extends BuildTask
         $this->setDry($run === 'dry');
         $this->setFast($run === 'fast');
 
+        $this->output = TaskOutput::create('Sweeper: clear archive', $this->isDry());
+
         // With slow requests, need to increase time limit to 1 hour
         if (!$this->isFast() && !$this->isDry()) {
             Environment::increaseTimeLimitTo(3600);
@@ -58,9 +68,12 @@ class SweeperClearArchiveTask extends BuildTask
 
         // Set keep versions
         $this->setKeepVersions((int)$request->getVar('keep') ?: (int)self::config()->get('keep'));
+        $this->output->line('Keeping the last ' . $this->getKeepVersions() . ' versions per record');
 
         // Loop over all versioned classes
         foreach ($this->getBaseVersionedClasses() as $class) {
+            $this->output->section($class, null, false);
+
             if (self::hasSnapshots() && !$this->isFast()) {
                 $this->flushSnapshots($class);
             }
@@ -68,7 +81,15 @@ class SweeperClearArchiveTask extends BuildTask
             $this->flushClass($class);
         }
 
-        $this->message("Flush complete!");
+        $this->output->summary([
+            'Draft versions cleared' => $this->totalDraftVersionsCleared,
+            'Archived versions cleared' => $this->totalArchivedVersionsCleared,
+            'Orphaned rows cleared' => $this->totalOrphanedRowsCleared,
+            'Snapshots cleared' => $this->totalSnapshotsCleared,
+            'Versions kept per record' => $this->getKeepVersions(),
+            'Mode' => $run,
+        ]);
+        $this->output->finish();
     }
 
     protected function getBaseVersionedClasses(): Generator
@@ -97,36 +118,21 @@ class SweeperClearArchiveTask extends BuildTask
 
     public function flushClass(string $class): void
     {
-        $this->message("Beginning flush for {$class}\n");
-
         // Delete old versions for non-deleted records (note: Can be slow on large recordsets)
         if (!$this->isFast()) {
-            $this->deleteOldVersions($class);
+            $this->totalDraftVersionsCleared += $this->deleteOldVersions($class);
         }
 
         // Clear all obsolete versions for deleted records
-        $this->deleteArchivedVersionsWithVersionRetention($class);
+        $this->totalArchivedVersionsCleared += $this->deleteArchivedVersionsWithVersionRetention($class);
 
         // Flush all subclass tables
-        $this->deleteOrphanedVersions($class);
-
-        // Yay
-        $this->message("Done flushing {$class}\n");
-    }
-
-    protected function message(string $string): void
-    {
-        if (Director::is_cli()) {
-            echo "{$string}\n";
-        } else {
-            echo HTML::createTag('p', [], Convert::raw2xml($string));
-        }
+        $this->totalOrphanedRowsCleared += $this->deleteOrphanedVersions($class);
     }
 
     public function flushSnapshots(string $class): void
     {
-        $prefix = $this->isDry() ? '(dry-run): ' : '';
-        $this->message($prefix . "Beginning snapshot flush for $class\n");
+        $this->output->line("Beginning snapshot flush for {$class}");
         $objects = $class::get();
 
         $totalClearedSnapshotCount = 0;
@@ -168,18 +174,16 @@ class SweeperClearArchiveTask extends BuildTask
 
                 $totalClearedSnapshotCount += $clearedSnapshotCounts;
                 $totalKeptSnapshotCount += $keptSnapshotCounts;
-                $this->message($prefix . "Cleared $clearedSnapshotCounts snapshots for $class: $object->ID");
-                $this->message($prefix . "Kept $keptSnapshotCounts snapshots for $class: $object->ID");
             } catch (\Exception $e) {
-                $this->message($prefix . "Exception during parsing of object $class: $object->ID ({$e->getMessage()})");
+                $this->output->warning("Exception during parsing of object {$class}: {$object->ID} ({$e->getMessage()})");
             }
         }
 
-        $this->message($prefix . "Cleared $totalClearedSnapshotCount snapshots for $class");
-        $this->message($prefix . "Kept $totalKeptSnapshotCount snapshots for $class");
+        $this->output->line("Cleared {$totalClearedSnapshotCount} snapshots for {$class} (kept {$totalKeptSnapshotCount})");
+        $this->totalSnapshotsCleared += $totalClearedSnapshotCount;
     }
 
-    public function deleteArchivedVersionsWithVersionRetention(string $class): void
+    public function deleteArchivedVersionsWithVersionRetention(string $class): int
     {
         $baseTable = DataObject::getSchema()->tableName($class);
         $baseVersionedTable = "{$baseTable}_Versions";
@@ -229,13 +233,12 @@ class SweeperClearArchiveTask extends BuildTask
 
         // Log output
         if ($clearedVersionCounts) {
-            $prefix = $this->isDry() ? '(dry-run): ' : '';
-            $this->message(
-                <<<MESSAGE
-                    {$prefix}Cleared {$clearedVersionCounts} old archived versions (before last {$this->getKeepVersions()}) from table {$baseVersionedTable}
-                    MESSAGE
+            $this->output->line(
+                "Cleared {$clearedVersionCounts} old archived versions (before last {$this->getKeepVersions()}) from table {$baseVersionedTable}"
             );
         }
+
+        return $clearedVersionCounts;
     }
 
     /**
@@ -243,7 +246,7 @@ class SweeperClearArchiveTask extends BuildTask
      *
      * @param string $class
      */
-    public function deleteOldVersions(string $class): void
+    public function deleteOldVersions(string $class): int
     {
         // E.g. `SiteTree`
         $baseTable = DataObject::getSchema()->tableName($class);
@@ -290,13 +293,12 @@ class SweeperClearArchiveTask extends BuildTask
 
         // Log output
         if ($clearedVersionCounts) {
-            $prefix = $this->isDry() ? '(dry-run): ' : '';
-            $this->message(
-                <<<MESSAGE
-                    {$prefix}Cleared {$clearedVersionCounts} old versions (before last {$this->getKeepVersions()}) from table {$baseVersionedTable}
-                    MESSAGE
+            $this->output->line(
+                "Cleared {$clearedVersionCounts} old versions (before last {$this->getKeepVersions()}) from table {$baseVersionedTable}"
             );
         }
+
+        return $clearedVersionCounts;
     }
 
     /**
@@ -331,19 +333,19 @@ class SweeperClearArchiveTask extends BuildTask
 
         // Log output
         if ($count) {
-            $prefix = $this->isDry() ? '(dry-run): ' : '';
-            $this->message("{$prefix}Cleared {$count} rows from {$baseVersionedTable} for deleted records");
+            $this->output->line("Cleared {$count} rows from {$baseVersionedTable} for deleted records");
         }
     }
 
     /**
      * @param string $class
      */
-    public function deleteOrphanedVersions(string $class): void
+    public function deleteOrphanedVersions(string $class): int
     {
         // E.g. `SiteTree`
         $baseTable = DataObject::getSchema()->tableName($class);
         $baseVersionedTable = "{$baseTable}_Versions";
+        $totalCleared = 0;
 
         foreach (ClassInfo::dataClassesFor($class) as $subclass) {
             // Skip base record
@@ -377,10 +379,12 @@ class SweeperClearArchiveTask extends BuildTask
 
             // Log output
             if ($count) {
-                $prefix = $this->isDry() ? '(dry-run): ' : '';
-                $this->message("{$prefix}Cleared {$count} rows from {$versionedTable}");
+                $this->output->line("Cleared {$count} rows from {$versionedTable}");
+                $totalCleared += $count;
             }
         }
+
+        return $totalCleared;
     }
 
     /**
