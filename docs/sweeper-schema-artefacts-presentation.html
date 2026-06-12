@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sweeper · Veilig schema opruimen zonder CREATE DATABASE</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --slide-bg: #ffffff;
+    --ink: #0f172a;
+    --muted: #64748b;
+    --line: #e2e8f0;
+    --accent: #2563eb;
+    --accent-soft: #eff6ff;
+    --good: #16a34a;
+    --good-soft: #f0fdf4;
+    --warn: #d97706;
+    --warn-soft: #fffbeb;
+    --bad: #dc2626;
+    --bad-soft: #fef2f2;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: var(--sans);
+    background: radial-gradient(1200px 800px at 70% -10%, #1e293b, var(--bg));
+    color: var(--ink);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 28px;
+  }
+  .deck {
+    width: min(1040px, 100%);
+    height: min(660px, 92vh);
+    position: relative;
+  }
+  .stage {
+    background: var(--slide-bg);
+    border-radius: 18px;
+    box-shadow: 0 30px 60px -20px rgba(0,0,0,.55);
+    height: 100%;
+    overflow: hidden;
+    position: relative;
+  }
+  .slide {
+    display: none;
+    padding: 48px 56px 72px;
+    height: 100%;
+    overflow-y: auto;
+    animation: fade .28s ease;
+  }
+  .slide.active { display: block; }
+  @keyframes fade { from { opacity: 0; transform: translateY(6px);} to { opacity: 1; transform: none;} }
+
+  .kicker {
+    font-size: 12px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 700;
+    margin: 0 0 10px;
+  }
+  h1 { font-size: 40px; line-height: 1.1; margin: 0 0 16px; letter-spacing: -.02em; }
+  h2 { font-size: 28px; line-height: 1.15; margin: 0 0 18px; letter-spacing: -.01em; }
+  p { font-size: 16px; line-height: 1.55; color: #1e293b; }
+  .lead { font-size: 18px; color: var(--muted); }
+  ul { margin: 8px 0; padding-left: 20px; }
+  li { font-size: 15.5px; line-height: 1.6; margin: 6px 0; }
+  code, .mono { font-family: var(--mono); }
+  code {
+    background: #f1f5f9; padding: 2px 6px; border-radius: 6px; font-size: .9em; color: #0f172a;
+  }
+  .pill {
+    display: inline-block; font-size: 12px; font-weight: 700; padding: 4px 10px;
+    border-radius: 999px; background: var(--accent-soft); color: var(--accent);
+  }
+
+  .title-slide { display: none; height: 100%; }
+  .title-slide.active { display: flex; flex-direction: column; justify-content: center; }
+  .title-slide .meta { margin-top: 26px; color: var(--muted); font-size: 14px; }
+  .title-slide .meta b { color: var(--ink); }
+
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 8px; }
+  .cols-3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 14px; margin-top: 12px; }
+  .card {
+    border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; background: #fff;
+  }
+  .card h3 { margin: 0 0 8px; font-size: 15px; }
+  .card.good { background: var(--good-soft); border-color: #bbf7d0; }
+  .card.bad { background: var(--bad-soft); border-color: #fecaca; }
+  .card.warn { background: var(--warn-soft); border-color: #fde68a; }
+  .card.accent { background: var(--accent-soft); border-color: #bfdbfe; }
+  .tag-good { color: var(--good); font-weight: 700; }
+  .tag-bad { color: var(--bad); font-weight: 700; }
+  .tag-warn { color: var(--warn); font-weight: 700; }
+
+  pre {
+    background: #0f172a; color: #e2e8f0; padding: 14px 16px; border-radius: 10px;
+    font-family: var(--mono); font-size: 13px; line-height: 1.5; overflow-x: auto; margin: 10px 0;
+  }
+  pre .c { color: #64748b; }
+  pre .k { color: #93c5fd; }
+  pre .s { color: #86efac; }
+  pre .r { color: #fca5a5; }
+
+  .flow { display: flex; align-items: stretch; gap: 0; margin: 18px 0; flex-wrap: wrap; }
+  .step {
+    flex: 1; min-width: 150px; border: 1px solid var(--line); border-radius: 12px; padding: 14px;
+    position: relative; background: #fff;
+  }
+  .step .n { position:absolute; top:-11px; left:14px; background: var(--accent); color:#fff; width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; }
+  .step h4 { margin: 6px 0 4px; font-size: 14px; }
+  .step p { font-size: 13px; color: var(--muted); margin: 0; line-height: 1.45; }
+  .arrow { align-self: center; color: var(--accent); font-size: 26px; padding: 0 6px; }
+
+  .note { border-left: 4px solid var(--accent); background: var(--accent-soft); padding: 12px 16px; border-radius: 0 10px 10px 0; margin: 14px 0; font-size: 14.5px; }
+  .note.warn { border-color: var(--warn); background: var(--warn-soft); }
+  .note.good { border-color: var(--good); background: var(--good-soft); }
+
+  table { border-collapse: collapse; width: 100%; margin-top: 10px; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; font-size: 12.5px; text-transform: uppercase; letter-spacing: .04em; }
+  td code { font-size: 12.5px; }
+
+  .open-item { display: flex; gap: 14px; padding: 14px 0; border-bottom: 1px dashed var(--line); }
+  .open-item:last-child { border-bottom: 0; }
+  .open-item .q { flex: 0 0 30px; height: 30px; border-radius: 8px; background: var(--warn); color: #fff; display:flex; align-items:center; justify-content:center; font-weight:700; }
+  .open-item .body { flex: 1; }
+  .open-item .body b { display:block; margin-bottom: 3px; }
+  .open-item .body span { font-size: 14px; color: var(--muted); line-height: 1.5; }
+  .sev { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; margin-left: 6px; vertical-align: middle; }
+  .sev.high { background: var(--bad-soft); color: var(--bad); }
+  .sev.med { background: var(--warn-soft); color: var(--warn); }
+  .sev.low { background: #f1f5f9; color: var(--muted); }
+
+  .bar {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 52px;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 22px; border-top: 1px solid var(--line); background: #fff;
+  }
+  .progress { display: flex; gap: 6px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--line); cursor: pointer; transition: .2s; }
+  .dot.on { background: var(--accent); transform: scale(1.25); }
+  .nav { display: flex; align-items: center; gap: 8px; }
+  button {
+    font-family: var(--sans); font-size: 14px; font-weight: 600; cursor: pointer;
+    border: 1px solid var(--line); background: #fff; color: var(--ink);
+    padding: 7px 14px; border-radius: 8px; transition: .15s;
+  }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  .counter { font-size: 13px; color: var(--muted); min-width: 54px; text-align: center; font-variant-numeric: tabular-nums; }
+  .hint { position: absolute; bottom: 64px; right: 24px; font-size: 12px; color: rgba(255,255,255,.5); }
+</style>
+</head>
+<body>
+<div class="deck">
+  <div class="stage" id="stage">
+
+    <!-- 0: TITLE -->
+    <section class="title-slide active">
+      <span class="pill">silverstripe-sweeper · technisch ontwerp</span>
+      <h1 style="margin-top:18px;">Veilig database&shy;schema opruimen<br>zonder <code style="font-size:.7em;">CREATE DATABASE</code></h1>
+      <p class="lead">We nemen het schema op dat SilverStripe zélf zou bouwen, zonder ook maar één database aan te raken.</p>
+      <div class="meta">
+        <b>Module:</b> wedevelopnl/silverstripe-sweeper &nbsp;·&nbsp; <b>Datum:</b> 2026-06-02 &nbsp;·&nbsp; <b>Status:</b> geverifieerd op host-project (dry-run + A/B)
+      </div>
+    </section>
+
+    <!-- 1: PROBLEEM -->
+    <section class="slide">
+      <p class="kicker">De aanleiding</p>
+      <h2>De bestaande taak loopt stuk op productie</h2>
+      <p><code>SweeperArtefactsTask</code> vergelijkt het live-schema met een "schoon" schema om verweesde tabellen, kolommen en indexen te vinden en te verwijderen. Dat schone schema wordt gebouwd met SilverStripe's <code>TempDatabase</code>.</p>
+      <div class="cols">
+        <div class="card bad">
+          <h3><span class="tag-bad">Symptoom</span></h3>
+          <p style="font-size:14.5px;margin:0;">Op managed/cloud hosting krijgt de app-DB-gebruiker een permissiefout. De taak kan niet draaien.</p>
+        </div>
+        <div class="card">
+          <h3>Wat we dachten</h3>
+          <p style="font-size:14.5px;margin:0;">"<i>Het bouwt toch een in-memory database?</i>" De beschrijving van de taak zegt dat letterlijk.</p>
+        </div>
+      </div>
+      <div class="note warn">Die aanname klopt niet. En dat is de kern van het probleem.</div>
+    </section>
+
+    <!-- 2: ROOT CAUSE -->
+    <section class="slide">
+      <p class="kicker">Root cause</p>
+      <h2><code>TempDatabase</code> maakt een <u>echte</u> database aan</h2>
+      <pre><span class="c">// TempDatabase::build() -> Database::selectDatabase(create: true)</span>
+<span class="c">//   -> MySQLSchemaManager::createDatabase()</span>
+<span class="k">CREATE DATABASE</span> <span class="s">"ss_tmpdb_1717322000_4821993"</span> ...</pre>
+      <p>Een fysieke <code>CREATE DATABASE</code> op dezelfde server als productie. Vereist server-rechten die de app-user niet (meer) heeft.</p>
+      <div class="cols">
+        <div class="card good"><h3>Geen regressie</h3><p style="font-size:14px;margin:0;">De <code>TempDatabase</code>-code is byte-identiek tussen SS&nbsp;4.13 en 5.2. Niet het framework veranderde, de hosting werd strenger.</p></div>
+        <div class="card accent"><h3>"In-memory" = alleen SQLite</h3><p style="font-size:14px;margin:0;">Voor MySQL/MariaDB bestaat zo'n database niet; het was altijd een echte temp-database.</p></div>
+      </div>
+    </section>
+
+    <!-- 3: INZICHT -->
+    <section class="slide">
+      <p class="kicker">Het sleutelinzicht</p>
+      <h2><code>dev/build</code> en <code>TempDatabase</code> gebruiken dezelfde build</h2>
+      <p>Beide produceren het schema via exact dezelfde methode:</p>
+      <pre><span class="k">TableBuilder</span>::singleton()-&gt;buildTables($schema, $dataClasses, ...);
+  <span class="c">// -> per class: requireTable()  +  elke extensie's augmentDatabase()</span>
+  <span class="c">// -> schemaUpdate() buffert, en flusht aan het eind via createTable()</span></pre>
+      <div class="note good">De database eronder is enkel het <b>rendertarget</b>. De waarheid zit in de build-traversal, niet in de engine. Dus: als we die traversal draaien en <code>createTable()</code> onderscheppen, hebben we het complete schema zonder database.</div>
+    </section>
+
+    <!-- 4: DE OPLOSSING -->
+    <section class="slide">
+      <p class="kicker">De oplossing</p>
+      <h2>Een recording schema manager</h2>
+      <p class="lead">We installeren tijdelijk een opnemende schemamanager als de actieve manager, draaien de build, en <b>registreren</b> wat er gebouwd zou worden in plaats van SQL uit te voeren.</p>
+      <div class="cols-3">
+        <div class="card good"><h3>✓ Geen database</h3><p style="font-size:13.5px;margin:0;">Geen temp-DB, geen <code>CREATE DATABASE</code>.</p></div>
+        <div class="card good"><h3>✓ Geen dependency</h3><p style="font-size:13.5px;margin:0;">Geen <code>silverstripe/sqlite3</code> nodig.</p></div>
+        <div class="card good"><h3>✓ Aparte taak</h3><p style="font-size:13.5px;margin:0;">De bestaande <code>sweeper-artefacts</code> blijft volledig intact.</p></div>
+      </div>
+      <div class="note">Nieuw: <code>sweeper-schema-artefacts</code> (segment), met <code>RecordingSchemaManager</code> + <code>SchemaDiff</code>.</div>
+    </section>
+
+    <!-- 5: HOE HET WERKT -->
+    <section class="slide">
+      <p class="kicker">Hoe het werkt</p>
+      <h2>Onderschep <code>createTable()</code></h2>
+      <pre><span class="c">// RecordingSchemaManager extends MySQLSchemaManager</span>
+public function createTable($table, $fields, $indexes, ...) {
+    <span class="c">// registreer i.p.v. SQL uitvoeren</span>
+    $this-&gt;recorded[$table] = [
+        <span class="s">'columns'</span> =&gt; array_keys($fields),   <span class="c">// incl. ID</span>
+        <span class="s">'indexes'</span> =&gt; $indexes,              <span class="c">// incl. fulltext-type</span>
+    ];
+    return $table; <span class="c">// geen DDL</span>
+}</pre>
+      <p style="font-size:14.5px;"><code>tableList/fieldList/indexList</code> geven leeg terug, zodat élke vereiste als "create" wordt opgenomen. Anders zou een bestaande kolom niet gebufferd worden en onterecht verweesd lijken.</p>
+    </section>
+
+    <!-- 6: ARCHITECTUUR / DATAFLOW -->
+    <section class="slide">
+      <p class="kicker">Dataflow</p>
+      <h2>Vier stappen, één connectie</h2>
+      <div class="flow">
+        <div class="step"><span class="n">1</span><h4>Lees huidig</h4><p>Live schema van de echte manager (read-only).</p></div>
+        <div class="arrow">&rarr;</div>
+        <div class="step"><span class="n">2</span><h4>Swap + record</h4><p><code>setSchemaManager(recorder)</code> in <code>try/finally</code>, draai de build.</p></div>
+        <div class="arrow">&rarr;</div>
+        <div class="step"><span class="n">3</span><h4>Diff</h4><p>Tabellen/kolommen op naam, indexen op signatuur.</p></div>
+        <div class="arrow">&rarr;</div>
+        <div class="step"><span class="n">4</span><h4>Drop</h4><p>Op de echte connectie. Standaard dry-run.</p></div>
+      </div>
+      <div class="note">De echte connectie wordt nooit losgekoppeld; in <code>finally</code> gaat de echte schemamanager altijd terug. Geen tweede DB, geen reconnect-hack.</div>
+    </section>
+
+    <!-- 7: INDEXEN -->
+    <section class="slide">
+      <p class="kicker">Indexen</p>
+      <h2>Vergelijk op signatuur, niet op naam</h2>
+      <p>Indexnamen kunnen variëren; de kolomcompositie niet. Daarom vergelijken we op <code>type</code> + gesorteerde kolommen.</p>
+      <pre><span class="c"># MySQL (huidig)      signatuur</span>
+idx_old_feature  ->  <span class="r">index:OldColumn</span>     <span class="c"># niet in opname -> verweesd</span>
+URLSegment       ->  unique:URLSegment  <span class="c"># matcht -> blijft</span>
+
+<span class="r">index:OldColumn</span>  ->  <span class="k">DROP INDEX</span> <span class="s">"idx_old_feature"</span>  <span class="c">(op echte naam)</span></pre>
+      <div class="note good">Bonus t.o.v. de SQLite-aanpak: omdat de opname vóór de render zit, behouden <b>fulltext/hash/rtree</b> hun type native. De eerder bedachte metadata-hybride is niet meer nodig.</div>
+    </section>
+
+    <!-- 8: VEILIGHEID -->
+    <section class="slide">
+      <p class="kicker">Veiligheid</p>
+      <h2>Vijf vangnetten</h2>
+      <div class="cols">
+        <div class="card good"><h3>🎫 Bevestigingstoken</h3><p style="font-size:13.5px;margin:0;">De dry-run print een token (hash van de droppable-set). <code>run=yes</code> weigert zonder of met verouderd token: je voert exact de gereviewde set uit, of niets.</p></div>
+        <div class="card"><h3>👁 Dry-run default</h3><p style="font-size:13.5px;margin:0;">Pas met <code>run=yes token=...</code> worden DROP's uitgevoerd.</p></div>
+        <div class="card"><h3>🔒 PRIMARY beschermd</h3><p style="font-size:13.5px;margin:0;">De primaire sleutel wordt nooit gedropt, in de diff én in de drop.</p></div>
+        <div class="card"><h3>🛑 Abort-on-error</h3><p style="font-size:13.5px;margin:0;">Faalt de opname, dan stopt de taak zonder wijzigingen. Een onvolledig referentieschema is onveilig om te diffen.</p></div>
+        <div class="card accent"><h3>✅ Zelf-validerend</h3><p style="font-size:13.5px;margin:0;">Op een net ge-<code>dev/build</code>-te DB hoort de dry-run <b>leeg</b> te zijn. Plus telling: <code>N reference tables recorded</code>.</p></div>
+      </div>
+      <div class="note">Toegang: <code>/dev/tasks</code> is in dev-modus open, op test/live alleen met <code>ADMIN</code>/<code>ALL_DEV_ADMIN</code>/<code>BUILDTASK_CAN_RUN</code>. Het token is geen geheim maar een review-binding.</div>
+    </section>
+
+    <!-- 9: ZELF-VALIDATIE -->
+    <section class="slide">
+      <p class="kicker">De beste verificatie</p>
+      <h2>Zelf-validerende eigenschap</h2>
+      <p>Omdat de recorder exact dezelfde traversal draait als <code>dev/build</code>, geldt op een schone (net gebouwde) database:</p>
+      <pre><span class="k">referentieschema</span> == <span class="k">gebouwd schema</span>   =&gt;   diff is <span class="s">leeg</span></pre>
+      <div class="note warn">Verschijnt er tóch iets op een schone DB, bijvoorbeeld een <code>_Versions</code>-tabel, een <code>many_many</code>-tabel of de <code>ID</code>-kolom, dan heeft de opname iets gemist en is er een bug. Dit is je betrouwbaarste check vóór je ooit <code>run=yes</code> draait.</div>
+    </section>
+
+    <!-- 10: SCOPE -->
+    <section class="slide">
+      <p class="kicker">Wat er gebouwd is</p>
+      <h2>Scope</h2>
+      <div class="cols">
+        <div class="card good">
+          <h3><span class="tag-good">In scope</span></h3>
+          <ul style="margin:0;">
+            <li><code>RecordingSchemaManager</code></li>
+            <li><code>SchemaDiff</code> (pure, getest)</li>
+            <li><code>SchemaArtefactsTask</code> (nieuw)</li>
+            <li>Unit tests + <code>autoload-dev</code></li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Buiten scope</h3>
+          <ul style="margin:0;">
+            <li>Bestaande <code>sweeper-artefacts</code> blijft</li>
+            <li><code>ClearArchive</code> / <code>Report</code> blijven</li>
+            <li>Geen nieuwe runtime-dependency</li>
+            <li>MySQL/MariaDB only</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- 11: OPEN VRAGEN -->
+    <section class="slide">
+      <p class="kicker">Verificatie</p>
+      <h2>Getest op Olympia (SS 5.2, Docker, MySQL 8.0)</h2>
+      <div class="open-item">
+        <div class="q" style="background:var(--good);">&check;</div>
+        <div class="body"><b>A/B-kruiscontrole tegen de oude taak <span class="sev low">geslaagd</span></b><span>Droppable tabellen <b>73 vs 73 identiek</b>; droppable kolomregels <b>37 vs 37 letterlijk identiek</b> (incl. <code>member.TwitterAccountName</code>, 0 code-referenties). Index-spec-vorm bevestigd.</span></div>
+      </div>
+      <div class="open-item">
+        <div class="q" style="background:var(--good);">&check;</div>
+        <div class="body"><b>Case-bug gevonden én gefixt <span class="sev med">les</span></b><span>MySQL met <code>lower_case_table_names=1</code> geeft kleine letters terug; hoofdlettergevoelig vergelijken vlagde <b>alle 384 tabellen</b>. Fix: case-insensitive tabelmatch + regressietest. Precies waarom we op een echt project testen.</span></div>
+      </div>
+      <div class="open-item">
+        <div class="q" style="background:var(--good);">&check;</div>
+        <div class="body"><b>Token-vangnet getest <span class="sev low">geslaagd</span></b><span>Dry-run print het token; <code>run=yes</code> zonder en met fout token worden geweigerd; tabel-telling onveranderd.</span></div>
+      </div>
+      <div class="open-item">
+        <div class="q">?</div>
+        <div class="body"><b>Nog open <span class="sev med">midden</span></b><span><code>run=yes</code> met geldig token is bewust niet uitgevoerd (destructief): alleen op een wegwerp-DB testen. Andere framework-versies dan 5.2 niet getest.</span></div>
+      </div>
+    </section>
+
+    <!-- 12: SAMENVATTING -->
+    <section class="slide">
+      <p class="kicker">Samenvatting</p>
+      <h2>Waar we staan</h2>
+      <ul>
+        <li><b>Probleem:</b> <code>TempDatabase</code> maakt een echte database; faalt zonder server-rechten.</li>
+        <li><b>Inzicht:</b> <code>dev/build</code> bouwt via <code>TableBuilder</code>; de DB is enkel rendertarget.</li>
+        <li><b>Oplossing:</b> recording schema manager, geen database, geen dependency, als aparte taak.</li>
+        <li><b>Indexen:</b> op signatuur; fulltext native correct.</li>
+        <li><b>Vertrouwen:</b> A/B-geverifieerd op Olympia (identieke uitkomst als de oude taak), bevestigingstoken, dry-run default, abort-on-error.</li>
+      </ul>
+      <div class="note">Volgende stap: committen op een branch; eventueel een gecontroleerde <code>run=yes</code> op een wegwerp-database.</div>
+      <p style="margin-top:14px;color:var(--muted);font-size:13.5px;">Spec: <code>docs/superpowers/specs/2026-06-02-sweeper-schema-recording-manager-design.md</code></p>
+    </section>
+
+    <div class="bar">
+      <div class="progress" id="progress"></div>
+      <div class="nav">
+        <button id="prev">&larr; Vorige</button>
+        <span class="counter" id="counter"></span>
+        <button id="next">Volgende &rarr;</button>
+      </div>
+    </div>
+  </div>
+  <div class="hint">Gebruik &larr; &rarr; om te navigeren</div>
+</div>
+
+<script>
+  const slides = Array.from(document.querySelectorAll('.stage > section'));
+  const progress = document.getElementById('progress');
+  const counter = document.getElementById('counter');
+  const prevBtn = document.getElementById('prev');
+  const nextBtn = document.getElementById('next');
+  let i = 0;
+
+  slides.forEach((_, idx) => {
+    const d = document.createElement('div');
+    d.className = 'dot';
+    d.addEventListener('click', () => go(idx));
+    progress.appendChild(d);
+  });
+  const dots = Array.from(progress.children);
+
+  function go(n) {
+    i = Math.max(0, Math.min(slides.length - 1, n));
+    slides.forEach((s, idx) => s.classList.toggle('active', idx === i));
+    dots.forEach((d, idx) => d.classList.toggle('on', idx === i));
+    counter.textContent = (i + 1) + ' / ' + slides.length;
+    prevBtn.disabled = i === 0;
+    nextBtn.disabled = i === slides.length - 1;
+    slides[i].scrollTop = 0;
+  }
+  prevBtn.addEventListener('click', () => go(i - 1));
+  nextBtn.addEventListener('click', () => go(i + 1));
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === 'PageDown') go(i + 1);
+    if (e.key === 'ArrowLeft' || e.key === 'PageUp') go(i - 1);
+  });
+  go(0);
+</script>
+</body>
+</html>
