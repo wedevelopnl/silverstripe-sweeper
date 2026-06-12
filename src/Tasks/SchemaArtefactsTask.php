@@ -2,12 +2,12 @@
 
 namespace Sweeper\Tasks;
 
-use SilverStripe\Control\Director;
 use SilverStripe\Core\ClassInfo;
 use SilverStripe\Dev\BuildTask;
 use SilverStripe\Dev\TestOnly;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\DB;
+use Sweeper\Output\TaskOutput;
 use Sweeper\Schema\RecordingSchemaManager;
 use Sweeper\Schema\SchemaDiff;
 
@@ -56,49 +56,52 @@ class SchemaArtefactsTask extends BuildTask
 
     private bool $dryRun = true;
 
+    private TaskOutput $out;
+
     public function run($request): int
     {
         $this->dryRun = !($request->getVar('run') === 'yes');
+        $this->out = TaskOutput::create('Sweeper: schema artefacts', $this->dryRun);
 
         $connection = DB::get_conn();
         if (!$connection || !$connection->isActive()) {
-            $this->log('No active database connection found');
+            $this->out->warning('No active database connection found');
+            $this->out->finish();
             return 1;
         }
 
-        $this->log('Reading current database schema');
+        $this->out->line('Reading current database schema');
         $current = $this->captureCurrentSchema();
 
-        $this->log('Recording reference schema (no temp database)');
+        $this->out->line('Recording reference schema (no temp database)');
         try {
             $clean = $this->captureReferenceSchema();
         } catch (\Throwable $e) {
             // A partial reference schema is unsafe to diff (it would flag real
             // artefacts as orphaned), so abort without changing anything.
-            $this->log('Failed to record reference schema: ' . $e->getMessage());
-            $this->log('Aborting without changes.', true, true);
+            $this->out->warning('Failed to record reference schema: ' . $e->getMessage());
+            $this->out->info('Aborting without changes.');
+            $this->out->finish();
             return 1;
         }
 
-        $this->log(count($clean) . ' reference tables recorded, ' . count($current) . ' tables in database');
+        $this->out->line(count($clean) . ' reference tables recorded, ' . count($current) . ' tables in database');
+        $this->out->line('Comparing schemas');
 
-        $this->log('Comparing schemas');
         $droppable = SchemaDiff::diff($current, $clean);
-
         $hasDroppables = $droppable['tables'] || $droppable['columns'] || $droppable['indexes'];
         $token = SchemaDiff::confirmationToken($droppable);
 
         if (!$this->dryRun && $hasDroppables) {
             $given = (string)$request->getVar('token');
             if (!hash_equals($token, $given)) {
-                $this->log('REFUSED: missing or stale confirmation token.', true);
-                $this->log('Run this task without run=yes first and review its output; it prints the token to use.');
-                $this->log(
-                    'A previously valid token means the droppable set changed since your review '
-                    . '(deploy, dev/build or manual schema change). Review again.',
-                    false,
-                    true
+                $this->out->warning('REFUSED: missing or stale confirmation token.');
+                $this->out->info(
+                    'Run this task without run=yes first and review its output; it prints the token to use. '
+                    . 'A previously valid token means the droppable set changed since your review '
+                    . '(deploy, dev/build or manual schema change). Review again.'
                 );
+                $this->out->finish();
                 return 1;
             }
         }
@@ -107,12 +110,19 @@ class SchemaArtefactsTask extends BuildTask
         $this->dropColumns($droppable['columns']);
         $this->dropIndexes($droppable['indexes']);
 
+        $this->out->summary([
+            'Tables' => count($droppable['tables']),
+            'Columns' => array_sum(array_map('count', $droppable['columns'])),
+            'Indexes' => array_sum(array_map('count', $droppable['indexes'])),
+            'Mode' => $this->dryRun ? 'dry-run (nothing changed)' : 'executed',
+        ]);
+
         if ($this->dryRun && $hasDroppables) {
-            $this->log("To execute exactly the set above, re-run with: run=yes token=$token", true, true);
-        } elseif ($this->dryRun) {
-            $this->log('Nothing to drop.', true, true);
+            $this->out->action('CLI', "vendor/bin/sake dev/tasks/sweeper-schema-artefacts run=yes token={$token}");
+            $this->out->action('URL', "/dev/tasks/sweeper-schema-artefacts?run=yes&token={$token}");
         }
 
+        $this->out->finish();
         return 0;
     }
 
@@ -207,16 +217,18 @@ class SchemaArtefactsTask extends BuildTask
     private function dropTables(array $tables): void
     {
         if (!$tables) {
-            $this->log('No droppable tables', true, true);
+            $this->out->line('No droppable tables');
             return;
         }
 
-        $this->log('Found ' . count($tables) . ' droppable tables', true, true);
+        $this->out->section('Droppable tables', count($tables));
+        $this->out->items($tables);
+
+        if ($this->dryRun) {
+            return;
+        }
+
         foreach ($tables as $table) {
-            $this->log("Dropping table $table");
-            if ($this->dryRun) {
-                continue;
-            }
             DB::query("DROP TABLE IF EXISTS \"$table\"");
         }
     }
@@ -224,60 +236,56 @@ class SchemaArtefactsTask extends BuildTask
     private function dropColumns(array $columnsByTable): void
     {
         if (!$columnsByTable) {
-            $this->log('No droppable columns', true, true);
+            $this->out->line('No droppable columns');
             return;
         }
 
-        $count = 0;
-        $this->log('Found ' . count($columnsByTable) . ' tables with droppable columns', true, true);
+        $rows = [];
         foreach ($columnsByTable as $table => $columns) {
-            $count += count($columns);
-            $this->log("$table columns: " . implode(', ', $columns));
-            if ($this->dryRun) {
-                continue;
-            }
+            $rows[] = [$table, implode(', ', $columns)];
+        }
+
+        $this->out->section('Droppable columns', array_sum(array_map('count', $columnsByTable)));
+        $this->out->table(['Table', 'Columns'], $rows);
+
+        if ($this->dryRun) {
+            return;
+        }
+
+        foreach ($columnsByTable as $table => $columns) {
             foreach ($columns as $column) {
                 DB::query("ALTER TABLE \"$table\" DROP COLUMN \"$column\"");
             }
         }
-        $this->log("$count columns" . ($this->dryRun ? ' would be dropped' : ' dropped'));
     }
 
     private function dropIndexes(array $indexesByTable): void
     {
         if (!$indexesByTable) {
-            $this->log('No droppable indexes', true, true);
+            $this->out->line('No droppable indexes');
             return;
         }
 
-        $count = 0;
-        $this->log('Found ' . count($indexesByTable) . ' tables with droppable indexes', true, true);
+        $rows = [];
+        foreach ($indexesByTable as $table => $indexes) {
+            $rows[] = [$table, implode(', ', $indexes)];
+        }
+
+        $this->out->section('Droppable indexes', array_sum(array_map('count', $indexesByTable)));
+        $this->out->table(['Table', 'Indexes'], $rows);
+
+        if ($this->dryRun) {
+            return;
+        }
+
         foreach ($indexesByTable as $table => $indexes) {
             foreach ($indexes as $index) {
                 // Defence in depth: the diff already excludes PRIMARY.
                 if (strtoupper((string)$index) === 'PRIMARY') {
                     continue;
                 }
-                $count++;
-                $this->log("$table index: $index");
-                if ($this->dryRun) {
-                    continue;
-                }
                 DB::query("DROP INDEX \"$index\" ON \"$table\"");
             }
         }
-        $this->log("$count indexes" . ($this->dryRun ? ' would be dropped' : ' dropped'));
-    }
-
-    private function log(string $message, bool $emptyLineBefore = false, bool $emptyLineAfter = false): void
-    {
-        // Plain newlines collapse in the browser; TaskRunner serves HTML there.
-        $eol = Director::is_cli() ? "\n" : "<br>\n";
-
-        echo ($emptyLineBefore ? $eol : '')
-            . (new \DateTime())->format(DATE_ATOM) . ': '
-            . ($this->dryRun ? '(dry-run) ' : '')
-            . $message . $eol
-            . ($emptyLineAfter ? $eol : '');
     }
 }
