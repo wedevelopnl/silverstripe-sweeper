@@ -67,14 +67,14 @@ class SweeperClearArchiveTask extends BuildTask
         }
 
         // Set keep versions
-        $this->setKeepVersions((int)$request->getVar('keep') ?: (int)self::config()->get('keep'));
+        $this->setKeepVersions((int)$request->getVar('keep') ?: (int)SweeperClearArchiveTask::config()->get('keep'));
         $this->output->line('Keeping the last ' . $this->getKeepVersions() . ' versions per record');
 
         // Loop over all versioned classes
         foreach ($this->getBaseVersionedClasses() as $class) {
             $this->output->section($class, null, false);
 
-            if (self::hasSnapshots() && !$this->isFast()) {
+            if (SweeperClearArchiveTask::hasSnapshots() && !$this->isFast()) {
                 $this->flushSnapshots($class);
             }
 
@@ -97,8 +97,8 @@ class SweeperClearArchiveTask extends BuildTask
         foreach ($this->directSubclasses(DataObject::class) as $class) {
             $shouldYieldClass = DataObject::has_extension($class, Versioned::class);
 
-            if (self::hasSnapshots()) {
-                $shouldYieldClass = $shouldYieldClass && $class !== self::SNAPSHOTS_EVENT_CLASS;
+            if (SweeperClearArchiveTask::hasSnapshots()) {
+                $shouldYieldClass = $shouldYieldClass && $class !== SweeperClearArchiveTask::SNAPSHOTS_EVENT_CLASS;
             }
 
             if ($shouldYieldClass) {
@@ -144,14 +144,14 @@ class SweeperClearArchiveTask extends BuildTask
 
                 $list = $object->getRelevantSnapshots();
                 $list = $list->sort('"LastEdited"', 'DESC');
-                $objectHash = (self::SNAPSHOT_CLASS)::hashObjectForSnapshot($object);
+                $objectHash = (SweeperClearArchiveTask::SNAPSHOT_CLASS)::hashObjectForSnapshot($object);
 
                 $fullVersions = 0;
                 foreach ($list as $snapshot) {
                     // A full version is a change not to a subset of an object, like a related element block,
                     // but a change to the root object.
                     $isFullVersion = $snapshot->OriginHash === $objectHash &&
-                        $snapshot->getActivityType() !== (self::SNAPSHOT_ACTIVITY_ENTRY_CLASS)::DELETED;
+                        $snapshot->getActivityType() !== (SweeperClearArchiveTask::SNAPSHOT_ACTIVITY_ENTRY_CLASS)::DELETED;
 
                     if ($isFullVersion) {
                         $fullVersions++;
@@ -392,14 +392,14 @@ class SweeperClearArchiveTask extends BuildTask
      */
     public function getKeepVersions(): int
     {
-        return self::config()->get('keep') ?: $this->keepVersions;
+        return SweeperClearArchiveTask::config()->get('keep') ?: $this->keepVersions;
     }
 
     /**
      * @param int $keepVersions
      * @return $this
      */
-    public function setKeepVersions(int $keepVersions): self
+    public function setKeepVersions(int $keepVersions): static
     {
         $this->keepVersions = $keepVersions;
         return $this;
@@ -417,7 +417,7 @@ class SweeperClearArchiveTask extends BuildTask
      * @param bool $dry
      * @return $this
      */
-    public function setDry(bool $dry): self
+    public function setDry(bool $dry): static
     {
         $this->dry = $dry;
         return $this;
@@ -435,7 +435,7 @@ class SweeperClearArchiveTask extends BuildTask
      * @param bool $fast
      * @return $this
      */
-    public function setFast(bool $fast): self
+    public function setFast(bool $fast): static
     {
         $this->fast = $fast;
         return $this;

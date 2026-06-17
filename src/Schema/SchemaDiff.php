@@ -103,7 +103,7 @@ class SchemaDiff
             // Indexes: compare by signature, never by name.
             $cleanSignatures = [];
             foreach ($cleanInfo['indexes'] ?? [] as $idx) {
-                $signature = self::indexSignature($idx['columns'] ?? [], $idx['type'] ?? 'index');
+                $signature = SchemaDiff::indexSignature($idx['columns'] ?? [], $idx['type'] ?? 'index');
                 $cleanSignatures[$signature] = true;
             }
 
@@ -116,7 +116,7 @@ class SchemaDiff
                     continue;
                 }
 
-                $signature = self::indexSignature($idx['columns'] ?? [], $idx['type'] ?? 'index');
+                $signature = SchemaDiff::indexSignature($idx['columns'] ?? [], $idx['type'] ?? 'index');
                 if (!isset($cleanSignatures[$signature])) {
                     $orphanIndexes[] = $name;
                 }

@@ -17,7 +17,7 @@ abstract class TaskOutput
 {
     protected ?bool $dryRun;
 
-    public static function create(string $title, ?bool $dryRun): self
+    public static function create(string $title, ?bool $dryRun): TaskOutput
     {
         return Director::is_cli()
             ? new CliOutput($title, $dryRun)
