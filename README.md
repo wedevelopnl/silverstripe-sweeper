@@ -25,12 +25,6 @@ The PRIMARY key is never dropped. Indexes are matched by signature
 NOTE: anything in the database that is not part of the SilverStripe schema WILL
 be reported, and removed when executed.
 
-### sweeper-artefacts (deprecated)
-
-Superseded by `sweeper-schema-artefacts`. This older variant builds the clean
-schema in a temporary database and therefore requires `CREATE DATABASE`/`DROP
-DATABASE` rights on the server, which managed hosting typically does not grant.
-
 ### sweeper-archive
 
 Prunes backlog of version history to a fixed number per record, as well as
