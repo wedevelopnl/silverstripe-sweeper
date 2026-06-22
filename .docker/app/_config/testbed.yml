@@ -1,0 +1,6 @@
+---
+Name: sweeper-testbed
+---
+# Placeholder so /app is a discoverable SilverStripe module (the manifest treats a
+# directory containing _config/ as a module). No project config is needed for the
+# sweeper testbed beyond what recipe-cms provides.
