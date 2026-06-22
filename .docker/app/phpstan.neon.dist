@@ -1,4 +1,8 @@
 parameters:
     level: 5
+    # SilverStripe core PHPDoc return types are often optimistic (e.g. DB::get_conn()
+    # is typed non-null but returns null when no database is configured), so don't treat
+    # them as certain — keeps legitimate defensive null-checks from being flagged as dead.
+    treatPhpDocTypesAsCertain: false
     paths:
         - /module/src

@@ -20,6 +20,7 @@
         ]
     },
     "require-dev": {
+        "cambis/silverstan": "^2.1",
         "phpunit/phpunit": "^9.6",
         "silverstripe/standards": "^1",
         "phpstan/extension-installer": "^1.3",
