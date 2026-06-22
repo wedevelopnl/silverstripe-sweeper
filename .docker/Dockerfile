@@ -20,11 +20,14 @@ WORKDIR /app
 ARG COMPOSER_FILE=app/composer.json
 COPY ${COMPOSER_FILE} /app/composer.json
 
-# Create a placeholder src/ directory for the app's autoload classmap entry.
-# Page and PageController are scaffolded by recipe-cms during composer install
-# (into /app/app/src/) — we must NOT pre-create them here or SilverStripe's
-# manifest will detect duplicates and fatal.
-RUN mkdir -p /app/src
+# SilverStripe requires Page and PageController classes in the project. They are
+# generated here (not stored in the repo) and the recipe's project-files-installed
+# list (app/composer.json) stops recipe-plugin from scaffolding duplicates into
+# /app/app. SilverStripe discovers modules by looking for _config/ or _config.php;
+# /app/_config makes /app the project module, so /app/src is scanned for these.
+RUN mkdir -p /app/src /app/_config \
+    && printf '<?php\n\nuse SilverStripe\\CMS\\Model\\SiteTree;\n\nclass Page extends SiteTree\n{\n}\n' > /app/src/Page.php \
+    && printf '<?php\n\nuse SilverStripe\\CMS\\Controllers\\ContentController;\n\nclass PageController extends ContentController\n{\n}\n' > /app/src/PageController.php
 
 COPY app/_config/ /app/_config/
 COPY app/templates/ /app/templates/
