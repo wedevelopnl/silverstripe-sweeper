@@ -203,6 +203,7 @@ final class SweeperClearArchiveTaskTest extends SapphireTest
         $id = (int) $record->ID;
         $record->delete();
         $before = $this->versionCount(VersionedRecord::class, $id);
+        self::assertGreaterThanOrEqual(3, $before);
 
         $task = SweeperClearArchiveTask::create();
         $task->setDry(true);
@@ -266,8 +267,9 @@ final class SweeperClearArchiveTaskTest extends SapphireTest
         $task = SweeperClearArchiveTask::create();
         $task->setDry(true);
 
-        $this->discardOutput(static fn () => $task->deleteOrphanedVersions(VersionedRecord::class));
+        $output = $this->discardOutput(static fn () => $task->deleteOrphanedVersions(VersionedRecord::class));
 
+        self::assertStringContainsString('Cleared 1 rows from', $output);
         self::assertSame($before, $this->childVersionCount($id));
     }
 
@@ -306,6 +308,8 @@ final class SweeperClearArchiveTaskTest extends SapphireTest
         // so the non-archived "old versions" message must be absent.
         $output = $this->discardOutput(static fn () => $task->flushClass(VersionedRecord::class));
 
+        // The record is a live draft, not archived; the retention pass prunes it anyway
+        // because deleteArchivedVersionsWithVersionRetention iterates all RecordIDs in _Versions.
         self::assertStringContainsString('old archived versions', $output);
         self::assertStringNotContainsString('Cleared 3 old versions', $output);
         self::assertSame(2, $this->versionCount(VersionedRecord::class, $id));
