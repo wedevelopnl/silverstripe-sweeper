@@ -65,6 +65,7 @@ tasks:
 
   ensure-up-snapshots:
     desc: Ensure the snapshots-profile services are running and ready
+    deps: [docker-env]
     cmds:
       - "{{.COMPOSE_SNAPSHOTS}} exec app-snapshots true 2>/dev/null || {{.COMPOSE_SNAPSHOTS}} up -d --build --wait"
 
