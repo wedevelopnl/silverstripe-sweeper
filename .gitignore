@@ -3,3 +3,11 @@ vendor/
 public/
 composer.lock
 .phpunit.result.cache
+
+# Docker generated env (worktree-specific ports)
+.docker/.env
+
+# PHPUnit
+phpunit.xml
+.phpunit.cache/
+coverage/
