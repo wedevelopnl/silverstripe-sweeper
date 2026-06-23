@@ -8,17 +8,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Commands
 
-This repo has a `phpunit.xml` but no lockfile or `phpcs.xml` of its own; tooling is pulled in via `require-dev` and the host project / shared standards. The host machine has no PHP, so run everything through Docker:
+The module ships **no `require-dev`**: dev tooling (phpunit, phpcs, phpstan, silverstripe/standards) lives in the Docker **testbed** under `.docker/`. The host machine has no PHP, so everything runs in the testbed, driven by [Task](https://taskfile.dev) (`Taskfile.yml`):
 
 ```bash
-# tests (composer:2 image; --ignore-platform-reqs because the image lacks ext-intl)
-docker run --rm -v "$PWD":/app -w /app composer:2 sh -c "composer install --no-interaction --ignore-platform-reqs --quiet && vendor/bin/phpunit"
-docker run --rm -v "$PWD":/app -w /app composer:2 vendor/bin/phpunit --filter testMethodName   # single test
-docker run --rm -v "$PWD":/app -w /app composer:2 vendor/bin/phpstan analyse   # static analysis (phpstan.neon, src/ only)
-docker run --rm -v "$PWD":/app -w /app composer:2 vendor/bin/phpcs             # lint
+task up                 # start the SilverStripe 5 testbed (builds on first run)
+task test               # all PHP tests (unit + integration suites)
+task test-unit          # unit suite only (likewise: task test-integration)
+task analyse            # PHPStan static analysis
+task lint               # phpcs (PSR-12) against src/ (task lint-fix to autofix)
+task down               # stop the testbed
 ```
 
-The phpstan SilverStripe extension is auto-registered via `phpstan/extension-installer`; no manual `includes` are needed in `phpstan.neon`.
+`task` targets auto-start the testbed (`ensure-up`) first. The authoritative configs live in the testbed, not the module root: `.docker/app/phpstan.neon.dist` (the module's own root `phpstan.neon` was removed) and `.docker/app/phpunit.xml.dist`. The phpstan SilverStripe extension is auto-registered via `phpstan/extension-installer`.
 
 ## Running the tasks
 

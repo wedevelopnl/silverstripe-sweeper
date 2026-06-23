@@ -21,7 +21,8 @@ use Sweeper\Schema\SchemaDiff;
  * Versioned/_Live/many_many tables and special index types, but needs no
  * CREATE DATABASE privilege.
  *
- * This is a separate task from `sweeper-artefacts`; that task is left untouched.
+ * This task replaces the former `sweeper-artefacts` task, which built a full
+ * temporary database to diff against.
  *
  * Modes (via ?run=):
  *  - (default)  dry-run: report droppable artefacts and print a confirmation token.
@@ -44,7 +45,7 @@ class SchemaArtefactsTask extends BuildTask
         SilverStripe would build (the same requireTable()/augmentDatabase() path as
         dev/build) and diffing it against the live database.
 
-        Unlike sweeper-artefacts this requires NO CREATE DATABASE privilege and no
+        Unlike a temporary-database approach this requires NO CREATE DATABASE privilege and no
         temporary database. Special index types (fulltext/hash/rtree) keep their
         type because the schema is recorded before the engine-specific render.
 
