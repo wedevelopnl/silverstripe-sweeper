@@ -5,6 +5,7 @@ version: '3'
 
 vars:
   COMPOSE: docker compose -f .docker/compose.yml
+  COMPOSE_SNAPSHOTS: docker compose -f .docker/compose.yml --profile snapshots
 
 tasks:
   docker-env:
@@ -59,6 +60,17 @@ tasks:
     deps: [ensure-up]
     cmds:
       - "{{.COMPOSE}} exec app vendor/bin/phpunit --testsuite integration"
+
+  ensure-up-snapshots:
+    desc: Ensure the snapshots-profile services are running and ready
+    cmds:
+      - "{{.COMPOSE_SNAPSHOTS}} exec app-snapshots true 2>/dev/null || {{.COMPOSE_SNAPSHOTS}} up -d --build --wait"
+
+  test-snapshots:
+    desc: Run PHP tests for the versioned-snapshots optional dependency
+    deps: [ensure-up-snapshots]
+    cmds:
+      - "{{.COMPOSE_SNAPSHOTS}} exec app-snapshots vendor/bin/phpunit --testsuite snapshots"
 
   coverage:
     desc: Run tests with coverage (HTML + Clover)

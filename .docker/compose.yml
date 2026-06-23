@@ -33,6 +33,39 @@ services:
       SS_ENVIRONMENT_TYPE: dev
       SS_PHPUNIT_FLUSH: 1
 
+  app-snapshots:
+    profiles: [snapshots]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        PHP_VERSION: ${PHP_VERSION:-8.3}
+        COMPOSER_FILE: app/composer.snapshots.json
+    volumes:
+      - ../composer.json:/module/composer.json:ro
+      - ../src:/module/src
+      - ../tests:/module/tests:ro
+      - ../_config:/module/_config:ro
+      - ../coverage:/app/coverage
+      - vendor-snapshots:/app/vendor
+    healthcheck:
+      test: test -f /tmp/.app-ready
+      interval: 3s
+      start_period: 60s
+      retries: 20
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SS_DATABASE_SERVER: db
+      SS_DATABASE_NAME: silverstripe_snapshots
+      SS_DATABASE_USERNAME: silverstripe
+      SS_DATABASE_PASSWORD: silverstripe
+      SS_DEFAULT_ADMIN_USERNAME: admin
+      SS_DEFAULT_ADMIN_PASSWORD: admin
+      SS_ENVIRONMENT_TYPE: dev
+      SS_PHPUNIT_FLUSH: 1
+
   db:
     image: mysql:8
     ports:
@@ -53,4 +86,5 @@ services:
 
 volumes:
   vendor:
+  vendor-snapshots:
   db-data:
