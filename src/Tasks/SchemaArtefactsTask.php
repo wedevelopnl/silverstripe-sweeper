@@ -8,6 +8,7 @@ use SilverStripe\Dev\TestOnly;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\DB;
 use Sweeper\Output\TaskOutput;
+use Sweeper\Schema\DropPlan;
 use Sweeper\Schema\RecordingSchemaManager;
 use Sweeper\Schema\SchemaDiff;
 
@@ -107,9 +108,19 @@ class SchemaArtefactsTask extends BuildTask
             }
         }
 
-        $this->dropTables($droppable['tables']);
-        $this->dropColumns($droppable['columns']);
-        $this->dropIndexes($droppable['indexes']);
+        // Preview every droppable artefact (always, even on dry-run).
+        $this->reportTables($droppable['tables']);
+        $this->reportIndexes($droppable['indexes']);
+        $this->reportColumns($droppable['columns']);
+
+        // Execute in DropPlan's dependency-safe order (tables, then indexes,
+        // then columns). Centralising the order there keeps it in one tested
+        // place instead of relying on the call order here.
+        if (!$this->dryRun) {
+            foreach (DropPlan::statements($droppable) as $statement) {
+                DB::query($statement);
+            }
+        }
 
         $this->out->summary([
             'Tables' => count($droppable['tables']),
@@ -215,7 +226,7 @@ class SchemaArtefactsTask extends BuildTask
         return $clean;
     }
 
-    private function dropTables(array $tables): void
+    private function reportTables(array $tables): void
     {
         if (!$tables) {
             $this->out->line('No droppable tables');
@@ -224,17 +235,9 @@ class SchemaArtefactsTask extends BuildTask
 
         $this->out->section('Droppable tables', count($tables));
         $this->out->items($tables);
-
-        if ($this->dryRun) {
-            return;
-        }
-
-        foreach ($tables as $table) {
-            DB::query("DROP TABLE IF EXISTS \"$table\"");
-        }
     }
 
-    private function dropColumns(array $columnsByTable): void
+    private function reportColumns(array $columnsByTable): void
     {
         if (!$columnsByTable) {
             $this->out->line('No droppable columns');
@@ -248,19 +251,9 @@ class SchemaArtefactsTask extends BuildTask
 
         $this->out->section('Droppable columns', array_sum(array_map('count', $columnsByTable)));
         $this->out->table(['Table', 'Columns'], $rows);
-
-        if ($this->dryRun) {
-            return;
-        }
-
-        foreach ($columnsByTable as $table => $columns) {
-            foreach ($columns as $column) {
-                DB::query("ALTER TABLE \"$table\" DROP COLUMN \"$column\"");
-            }
-        }
     }
 
-    private function dropIndexes(array $indexesByTable): void
+    private function reportIndexes(array $indexesByTable): void
     {
         if (!$indexesByTable) {
             $this->out->line('No droppable indexes');
@@ -274,19 +267,5 @@ class SchemaArtefactsTask extends BuildTask
 
         $this->out->section('Droppable indexes', array_sum(array_map('count', $indexesByTable)));
         $this->out->table(['Table', 'Indexes'], $rows);
-
-        if ($this->dryRun) {
-            return;
-        }
-
-        foreach ($indexesByTable as $table => $indexes) {
-            foreach ($indexes as $index) {
-                // Defence in depth: the diff already excludes PRIMARY.
-                if (strtoupper((string)$index) === 'PRIMARY') {
-                    continue;
-                }
-                DB::query("DROP INDEX \"$index\" ON \"$table\"");
-            }
-        }
     }
 }
