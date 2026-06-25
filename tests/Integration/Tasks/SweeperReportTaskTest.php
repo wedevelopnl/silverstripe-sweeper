@@ -164,6 +164,12 @@ final class SweeperReportTaskTest extends SapphireTest
                 true,
                 true,
             ],
+            // namespace-filter matches nothing → NeverAppliedExtension (and all SilverStripe classes) excluded
+            'namespace excludes all' => [
+                ['namespace-filter' => 'NoSuchNamespace', 'no-silverstripe-filter' => '1'],
+                false,  // NeverAppliedExtension's FQCN does not contain 'NoSuchNamespace'
+                false,  // the namespace filter also excludes SilverStripe\ classes
+            ],
         ];
     }
 }
