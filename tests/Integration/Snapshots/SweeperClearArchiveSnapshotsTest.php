@@ -55,6 +55,7 @@ final class SweeperClearArchiveSnapshotsTest extends SapphireTest
         $output = $this->discardOutput(static fn () => $task->flushSnapshots(VersionedRecord::class));
 
         self::assertStringContainsString('(dry-run)', $output);
+        self::assertStringContainsString('Cleared', $output);
         self::assertSame($before, $this->fullVersionCount($record));
     }
 
