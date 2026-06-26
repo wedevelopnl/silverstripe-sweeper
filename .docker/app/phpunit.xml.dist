@@ -7,6 +7,8 @@
     <testsuites>
         <testsuite name="unit">
             <directory>vendor/wedevelopnl/silverstripe-sweeper/tests/Unit</directory>
+            <directory>vendor/wedevelopnl/silverstripe-sweeper/tests/Schema</directory>
+            <directory>vendor/wedevelopnl/silverstripe-sweeper/tests/Output</directory>
         </testsuite>
         <testsuite name="integration">
             <directory>vendor/wedevelopnl/silverstripe-sweeper/tests/Integration</directory>

@@ -6,6 +6,7 @@ use SilverStripe\Core\ClassInfo;
 use SilverStripe\Dev\BuildTask;
 use SilverStripe\ORM\DataExtension;
 use SilverStripe\ORM\DataObject;
+use Sweeper\Output\TaskOutput;
 
 class SweeperReportTask extends BuildTask
 {
@@ -27,14 +28,17 @@ class SweeperReportTask extends BuildTask
         $filterSilverstripeClasses = $request->requestVar('no-silverstripe-filter') === null;
         $filterSpecificNamespace = $request->requestVar('namespace-filter');
 
+        $out = TaskOutput::create('Sweeper: report', null);
+        $out->info(
+            'Filters: '
+            . ($filterSilverstripeClasses ? 'SilverStripe\\ classes hidden' : 'SilverStripe\\ classes included')
+            . ($filterSpecificNamespace ? ", namespace contains \"{$filterSpecificNamespace}\"" : '')
+        );
+
         $dataObjectSubclasses = ClassInfo::subclassesFor(DataObject::class);
         $dataExtensionSubclasses = array_values(ClassInfo::subclassesFor(DataExtension::class));
 
-        echo "\n";
-        echo "Checking for data objects with no instances \n";
-        echo "--------------------------------------------\n";
-        $noInstanceDataObjectCount = 0;
-
+        $withoutInstances = [];
         foreach ($dataObjectSubclasses as $dataObjectClass) {
             if ($dataObjectClass === DataObject::class) {
                 continue;
@@ -49,17 +53,18 @@ class SweeperReportTask extends BuildTask
             }
 
             if ($dataObjectClass::get()->count() === 0) {
-                echo "$dataObjectClass has no active instances. \n";
-                $noInstanceDataObjectCount++;
+                $withoutInstances[] = $dataObjectClass;
             }
         }
-        echo "\nFound $noInstanceDataObjectCount dataObjects without any instances \n";
 
-        echo "\n";
-        echo "Checking for data extensions that are never applied \n";
-        echo "--------------------------------------------\n";
+        $out->section('DataObjects without instances', count($withoutInstances));
+        if ($withoutInstances) {
+            $out->items($withoutInstances);
+        } else {
+            $out->line('Every DataObject has at least one instance.');
+        }
+
         $appliedDataExtensions = [];
-
         foreach ($dataObjectSubclasses as $dataObjectClass) {
             /** @var DataObject $singleton */
             $singleton = $dataObjectClass::singleton();
@@ -77,7 +82,7 @@ class SweeperReportTask extends BuildTask
         }
 
         $appliedDataExtensions = array_unique($appliedDataExtensions);
-        $dataExtensionDiff = array_filter(
+        $dataExtensionDiff = array_values(array_filter(
             array_diff($dataExtensionSubclasses, $appliedDataExtensions),
             static function ($className) use ($filterSilverstripeClasses, $filterSpecificNamespace) {
                 if ($filterSilverstripeClasses && $filterSpecificNamespace) {
@@ -94,20 +99,24 @@ class SweeperReportTask extends BuildTask
 
                 return true;
             }
-        );
+        ));
 
-        if (!count($dataExtensionDiff)) {
-            echo "All DataExtensions are applied at least once. \n\n";
+        $out->section('DataExtensions never applied', count($dataExtensionDiff));
+        if ($dataExtensionDiff) {
+            $out->items($dataExtensionDiff);
+            $out->info(
+                'NOTE: A DataExtension could be listed even though you have it applied somewhere; this is '
+                . 'most likely a case of a DataExtension that can safely extend Extension instead. You can at '
+                . 'least safely conclude that there are no subclasses of DataObject with that extension.'
+            );
         } else {
-            echo "Found ". count($dataExtensionDiff) . " DataExtensions that are never applied.\n\n";
-
-            foreach ($dataExtensionDiff as $className) {
-                echo "$className\n";
-            }
-
-            echo "\nNOTE: A DataExtension could be listed even though you have it applied somewhere, this is\n";
-            echo "most likely a case of a DataExtension that can safely extend Extension instead. You can at \n";
-            echo "least safely conclude that there are no subclasses of DataObject with that extension.\n";
+            $out->line('All DataExtensions are applied at least once.');
         }
+
+        $out->summary([
+            'DataObjects without instances' => count($withoutInstances),
+            'DataExtensions never applied' => count($dataExtensionDiff),
+        ]);
+        $out->finish();
     }
 }

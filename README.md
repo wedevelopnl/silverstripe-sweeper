@@ -4,13 +4,31 @@ A set of tasks that help clean up long-running silverstripe projects.
 
 ## Tasks
 
-### sweeper-artefacts
+### sweeper-schema-artefacts
 
-Builds a clean in-memory database and compares it with the schema of the currently configured database,
-will then run a diff of both schemas to discern any extraneous tables or columns that can be removed.
+Finds (and optionally removes) database tables, columns and indexes that are no
+longer part of your SilverStripe schema. `dev/build` only ever creates and
+updates schema, it never drops anything, so removed DataObjects, renamed fields
+and dropped extensions leave orphaned tables, columns and indexes behind.
 
-NOTE: This means that anything that is stored in the database that is not defined in the silverstripe schema
-WILL be removed.
+It determines the expected schema by running SilverStripe's own
+`requireTable()`/`augmentDatabase()` path (the same as `dev/build`) and diffing
+it against the live database. It needs **no** `CREATE DATABASE` privilege, so it
+also runs on restricted database users.
+
+Workflow:
+
+1. Run `dev/tasks/sweeper-schema-artefacts` (dry-run by default). Review the
+   report; it ends with a confirmation token.
+2. Run `dev/tasks/sweeper-schema-artefacts?run=yes&token=<token>` to execute
+   exactly the reviewed set. A stale token (schema changed since your review) is
+   refused.
+
+The PRIMARY key is never dropped. Indexes are matched by signature
+(type + columns), so engine-generated index names are handled correctly.
+
+NOTE: anything in the database that is not part of the SilverStripe schema WILL
+be reported, and removed when executed.
 
 ### sweeper-archive
 

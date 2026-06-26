@@ -21,6 +21,11 @@
             "Sweeper\\": "src/"
         }
     },
+    "autoload-dev": {
+        "psr-4": {
+            "Sweeper\\Tests\\": "tests/"
+        }
+    },
     "minimum-stability": "dev",
     "prefer-stable": true,
     "config": {
