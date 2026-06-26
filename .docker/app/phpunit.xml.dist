@@ -12,6 +12,10 @@
         </testsuite>
         <testsuite name="integration">
             <directory>vendor/wedevelopnl/silverstripe-sweeper/tests/Integration</directory>
+            <exclude>vendor/wedevelopnl/silverstripe-sweeper/tests/Integration/Snapshots</exclude>
+        </testsuite>
+        <testsuite name="snapshots">
+            <directory>vendor/wedevelopnl/silverstripe-sweeper/tests/Integration/Snapshots</directory>
         </testsuite>
     </testsuites>
     <coverage>

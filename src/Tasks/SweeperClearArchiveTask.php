@@ -144,7 +144,7 @@ class SweeperClearArchiveTask extends BuildTask
 
                 $list = $object->getRelevantSnapshots();
                 $list = $list->sort('"LastEdited"', 'DESC');
-                $objectHash = (SweeperClearArchiveTask::SNAPSHOT_CLASS)::hashObjectForSnapshot($object);
+                $objectHash = (SweeperClearArchiveTask::SNAPSHOT_CLASS)::singleton()->hashObjectForSnapshot($object);
 
                 $fullVersions = 0;
                 foreach ($list as $snapshot) {
