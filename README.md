@@ -6,10 +6,15 @@ A set of tasks that help clean up long-running silverstripe projects.
 
 ### sweeper-schema-artefacts
 
-Finds (and optionally removes) orphaned tables, columns and indexes by recording
-the schema SilverStripe would build (the same `requireTable()`/`augmentDatabase()`
-path as `dev/build`) and diffing it against the live database. Requires **no**
-`CREATE DATABASE` privilege and no temporary database.
+Finds (and optionally removes) database tables, columns and indexes that are no
+longer part of your SilverStripe schema. `dev/build` only ever creates and
+updates schema, it never drops anything, so removed DataObjects, renamed fields
+and dropped extensions leave orphaned tables, columns and indexes behind.
+
+It determines the expected schema by running SilverStripe's own
+`requireTable()`/`augmentDatabase()` path (the same as `dev/build`) and diffing
+it against the live database. It needs **no** `CREATE DATABASE` privilege, so it
+also runs on restricted database users.
 
 Workflow:
 

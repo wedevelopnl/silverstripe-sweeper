@@ -13,17 +13,19 @@ use Sweeper\Schema\RecordingSchemaManager;
 use Sweeper\Schema\SchemaDiff;
 
 /**
- * Finds (and optionally removes) orphaned tables, columns and indexes WITHOUT
- * creating a temporary database.
+ * Reports (and optionally removes) database tables, columns and indexes that
+ * are no longer part of the SilverStripe schema.
+ *
+ * dev/build only ever creates and updates schema, it never drops anything, so
+ * removed DataObjects, renamed fields and dropped extensions leave orphaned
+ * tables, columns and indexes behind. This task finds that leftover schema so
+ * the database can be brought back in line with the code.
  *
  * The reference schema is built by running SilverStripe's own
  * requireTable()/augmentDatabase() path against a RecordingSchemaManager (see
- * that class). This captures everything dev/build would create, including
- * Versioned/_Live/many_many tables and special index types, but needs no
- * CREATE DATABASE privilege.
- *
- * This task replaces the former `sweeper-artefacts` task, which built a full
- * temporary database to diff against.
+ * that class), capturing everything dev/build would create, including
+ * Versioned/_Live/many_many tables and special index types. Anything in the
+ * live database that the reference schema does not define is droppable.
  *
  * Modes (via ?run=):
  *  - (default)  dry-run: report droppable artefacts and print a confirmation token.
@@ -39,16 +41,22 @@ class SchemaArtefactsTask extends BuildTask
 {
     private static string $segment = 'sweeper-schema-artefacts';
 
-    protected $title = 'Sweeper: schema artefacts (no temp database)';
+    protected $title = 'Sweeper: schema artefacts';
 
     protected $description = <<<DESCRIPTION
-        Finds orphaned tables, columns and indexes by recording the schema that
-        SilverStripe would build (the same requireTable()/augmentDatabase() path as
-        dev/build) and diffing it against the live database.
+        Reports (and optionally removes) database tables, columns and indexes that
+        are no longer part of your SilverStripe schema.
 
-        Unlike a temporary-database approach this requires NO CREATE DATABASE privilege and no
-        temporary database. Special index types (fulltext/hash/rtree) keep their
-        type because the schema is recorded before the engine-specific render.
+        dev/build only ever creates and updates schema, it never drops anything, so
+        over the life of a project removed DataObjects, renamed fields and dropped
+        extensions leave orphaned tables, columns and indexes behind. This task
+        finds that leftover schema so you can clean it up and keep the database in
+        sync with the code.
+
+        It determines the expected schema by running SilverStripe's own schema build
+        (the same requireTable()/augmentDatabase() path as dev/build) and compares it
+        against the live database. Anything the schema no longer defines is reported
+        as droppable.
 
         NOTE: anything in the database that is not part of the SilverStripe schema
         WILL be reported, and removed when run with run=yes. Destructive runs
@@ -75,7 +83,7 @@ class SchemaArtefactsTask extends BuildTask
         $this->out->line('Reading current database schema');
         $current = $this->captureCurrentSchema();
 
-        $this->out->line('Recording reference schema (no temp database)');
+        $this->out->line('Recording reference schema');
         try {
             $clean = $this->captureReferenceSchema();
         } catch (\Throwable $e) {
